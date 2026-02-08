@@ -1,0 +1,456 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Математический Тренажёр — Standalone</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+      body {
+        font-family: 'Nunito', sans-serif;
+        background-color: #f0f9ff;
+        color: #1a202c;
+      }
+      .glass-effect {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+      }
+      input::-webkit-outer-spin-button,
+      input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      .task-card {
+        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+      }
+      .task-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.15);
+      }
+      .animate-bounce-light {
+        animation: bounce 2s infinite;
+      }
+      @keyframes bounce {
+        0%, 100% { transform: translateY(-5%); animation-timing-function: cubic-bezier(0.8, 0, 1, 1); }
+        50% { transform: translateY(0); animation-timing-function: cubic-bezier(0, 0, 0.2, 1); }
+      }
+    </style>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect } = React;
+
+      // --- Иконки ---
+      const GlassIcon = ({ type, className = "w-12 h-12" }) => {
+        const color = type === 'water' ? '#bae6fd' : '#f87171';
+        return (
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+            <path d="M19 4H5L6 20C6 21.1046 6.89543 22 8 22H16C17.1046 22 18 21.1046 18 20L19 4Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+            <path d="M6 10H18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <path d="M18 10L17.5 18H6.5L6 10H18Z" fill={color} />
+            <path d="M8 2H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        );
+      };
+
+      // --- Компонент: Карточка задачи ---
+      const TaskCard = ({ taskNumber, description, children, onCheck, isCorrect, onReset }) => {
+        return (
+          <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden mb-12 task-card border-t-[12px] border-blue-500 relative">
+            {isCorrect === true && (
+              <div className="absolute top-6 right-8 text-4xl animate-bounce">⭐</div>
+            )}
+            <div className="p-8 md:p-12">
+              <div className="flex items-center gap-6 mb-10">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 text-white rounded-[1.5rem] flex items-center justify-center font-black text-3xl shadow-xl transform rotate-3">
+                  {taskNumber}
+                </div>
+                <h2 className="text-4xl font-black text-gray-800 tracking-tighter">Задание {taskNumber}</h2>
+              </div>
+              <p className="text-gray-600 text-xl mb-12 leading-relaxed whitespace-pre-line font-bold">
+                {description}
+              </p>
+              <div className="mb-12">{children}</div>
+              <div className="flex flex-col sm:flex-row gap-6">
+                <button
+                  onClick={onCheck}
+                  className={`flex-1 py-6 px-12 rounded-[2rem] font-black text-2xl transition-all duration-300 transform active:scale-95 shadow-2xl ${
+                    isCorrect === true 
+                      ? 'bg-green-500 text-white hover:bg-green-600 shadow-green-200' 
+                      : isCorrect === false
+                      ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-200'
+                      : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-300'
+                  }`}
+                >
+                  {isCorrect === true ? 'ПРАВИЛЬНО! ✨' : isCorrect === false ? 'ЕЩЁ РАЗ! ❌' : 'ПРОВЕРИТЬ'}
+                </button>
+                {onReset && (
+                  <button
+                    onClick={onReset}
+                    className="py-6 px-10 rounded-[2rem] font-black text-lg bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all duration-300"
+                  >
+                    СБРОСИТЬ
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // --- Основное приложение ---
+      const App = () => {
+        const [taskStates, setTaskStates] = useState({});
+        const [taskFeedback, setTaskFeedback] = useState({});
+
+        // Автоматическая очистка хранилища при каждой перезагрузке
+        useEffect(() => {
+          localStorage.clear();
+          const handleUnload = () => localStorage.clear();
+          window.addEventListener('beforeunload', handleUnload);
+          return () => window.removeEventListener('beforeunload', handleUnload);
+        }, []);
+
+        const updateTaskState = (id, val) => {
+          const newState = { ...taskStates, [id]: val };
+          setTaskStates(newState);
+          setTaskFeedback(prev => ({ ...prev, [id]: null }));
+        };
+
+        const checkTask = (id) => {
+          const state = taskStates[id];
+          let correct = false;
+
+          switch (id) {
+            case 1:
+              const v1 = [state?.v1, state?.v2, state?.v3].map(v => parseInt(v)).sort();
+              correct = JSON.stringify(v1) === JSON.stringify([31, 62, 93]);
+              break;
+            case 2:
+              const v2 = [parseInt(state?.v1), parseInt(state?.v2)].sort();
+              correct = JSON.stringify(v2) === JSON.stringify([4, 6]);
+              break;
+            case 3: correct = parseInt(state) === 10; break;
+            case 4: correct = parseInt(state) === 7; break;
+            case 5:
+              const v5 = [parseInt(state?.v1), parseInt(state?.v2)].sort();
+              correct = JSON.stringify(v5) === JSON.stringify([3, 6]);
+              break;
+            case 6:
+              const p1_6 = (state?.water === 3 && state?.juice === 9);
+              if (p1_6) {
+                if (parseInt(state?.mors) === 12) correct = true;
+                else {
+                  if (!state?.part1Verified) updateTaskState(6, { ...state, part1Verified: true });
+                  correct = false;
+                }
+              }
+              break;
+            case 7: correct = parseInt(state) === 15; break;
+            case 8:
+              const p1_8 = state?.white === 1 && state?.green === 2 && parseInt(state?.total) === 3;
+              if (p1_8) {
+                if (state?.part1Verified) {
+                  correct = state?.p2_count === 4 && parseInt(state?.p2_ans) === 8;
+                } else {
+                  updateTaskState(8, { ...state, part1Verified: true, p2_count: 0 });
+                  correct = false;
+                }
+              }
+              break;
+            case 9: correct = parseInt(state) === 18; break;
+            case 10:
+              const v10 = [parseInt(state?.v1), parseInt(state?.v2)].sort();
+              correct = JSON.stringify(v10) === JSON.stringify([4, 7]);
+              break;
+            case 11: correct = parseInt(state?.v1) === 60 && parseInt(state?.v2) === 15; break;
+            case 12: correct = parseInt(state?.v1) === 1 && parseInt(state?.v2) === 16; break;
+            case 13:
+              const r1 = [parseInt(state?.r1v1), parseInt(state?.r1v2)].sort();
+              const r2 = [parseInt(state?.r2v1), parseInt(state?.r2v2)].sort();
+              const sols = [[3, 8], [4, 9]];
+              const m1 = JSON.stringify(r1) === JSON.stringify(sols[0]) && JSON.stringify(r2) === JSON.stringify(sols[1]);
+              const m2 = JSON.stringify(r1) === JSON.stringify(sols[1]) && JSON.stringify(r2) === JSON.stringify(sols[0]);
+              correct = m1 || m2;
+              break;
+            case 14: correct = parseInt(state?.v1) === 35 && parseInt(state?.v2) === 9; break;
+          }
+
+          setTaskFeedback(prev => ({ ...prev, [id]: correct }));
+        };
+
+        const progress = Object.values(taskFeedback).filter(v => v === true).length;
+        const total = 14;
+
+        return (
+          <div className="max-w-5xl mx-auto px-6 py-12">
+            {/* Хедер прогресса */}
+            <header className="sticky top-6 z-50 glass-effect p-8 rounded-[3.5rem] shadow-2xl border-2 border-white/50 mb-20 flex flex-col md:flex-row items-center justify-between gap-10">
+              <div className="text-center md:text-left">
+                <h1 className="text-4xl md:text-5xl font-black text-blue-900 leading-none mb-3 tracking-tighter">СУПЕР МАТЕМАТИКА</h1>
+                <p className="text-blue-500 font-black text-xl tracking-widest uppercase italic tracking-tighter">Твой Мастер-Тренажёр</p>
+              </div>
+              <div className="w-full md:w-80 bg-white/60 p-6 rounded-[2.5rem] border-2 border-blue-100 shadow-inner">
+                <div className="flex justify-between mb-3 text-sm font-black text-blue-800 uppercase italic">
+                  <span>Твой Прогресс</span>
+                  <span>{Math.round((progress/total)*100)}%</span>
+                </div>
+                <div className="h-5 bg-blue-100 rounded-full overflow-hidden border-2 border-blue-200">
+                  <div className="h-full bg-gradient-to-r from-blue-400 to-blue-700 transition-all duration-1000 ease-out shadow-lg" style={{ width: `${(progress/total)*100}%` }}></div>
+                </div>
+                <p className="mt-3 text-center text-blue-400 font-bold text-xs uppercase italic tracking-widest">Задач: {progress} / {total}</p>
+              </div>
+            </header>
+
+            <main className="space-y-24">
+              {/* Задача 1 */}
+              <TaskCard taskNumber={1} description="Найди все двузначные числа, у которых число десятков в 3 раза больше числа единиц." isCorrect={taskFeedback[1]} onCheck={() => checkTask(1)}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+                  {[1, 2, 3].map(i => (
+                    <input key={i} type="number" placeholder="ЧИСЛО" value={taskStates[1]?.[`v${i}`] || ''} onChange={e => updateTaskState(1, { ...taskStates[1], [`v${i}`]: e.target.value })} className="p-8 text-center text-4xl font-black bg-blue-50 border-4 border-blue-100 rounded-[2.5rem] focus:border-blue-500 focus:outline-none text-gray-900 shadow-sm transition-all focus:scale-105"/>
+                  ))}
+                </div>
+              </TaskCard>
+
+              {/* Задача 2 */}
+              <TaskCard taskNumber={2} description="Мистер Трудди задумал два однозначных числа, одно из которых на 2 больше другого. Произведение этих чисел равно 24." isCorrect={taskFeedback[2]} onCheck={() => checkTask(2)}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 max-w-2xl mx-auto">
+                   <div className="space-y-2"><p className="text-xs font-black text-blue-400 ml-4 uppercase tracking-widest">Первое число</p><input type="number" value={taskStates[2]?.v1 || ''} onChange={e => updateTaskState(2, { ...taskStates[2], v1: e.target.value })} className="w-full p-8 text-center text-4xl font-black bg-blue-50 border-4 border-blue-100 rounded-[2.5rem] focus:border-blue-500 outline-none"/></div>
+                   <div className="space-y-2"><p className="text-xs font-black text-blue-400 ml-4 uppercase tracking-widest">Второе число</p><input type="number" value={taskStates[2]?.v2 || ''} onChange={e => updateTaskState(2, { ...taskStates[2], v2: e.target.value })} className="w-full p-8 text-center text-4xl font-black bg-blue-50 border-4 border-blue-100 rounded-[2.5rem] focus:border-blue-500 outline-none"/></div>
+                </div>
+              </TaskCard>
+
+              {/* Задача 3 */}
+              <TaskCard taskNumber={3} description="Чтобы сварить одну порцию вишнёвого варенья, мадам Роза берёт 1 кг сахара и 2 кг вишни. Сколько кг вишни потребуется для варенья из 5 кг сахара?" isCorrect={taskFeedback[3]} onCheck={() => checkTask(3)}>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                  <input type="number" placeholder="?" value={taskStates[3] || ''} onChange={e => updateTaskState(3, e.target.value)} className="w-48 p-8 text-center text-5xl font-black bg-purple-50 border-4 border-purple-100 rounded-[2.5rem] text-purple-700 outline-none focus:border-purple-500"/>
+                  <span className="text-2xl font-black text-gray-400 uppercase italic">кг вишни</span>
+                </div>
+              </TaskCard>
+
+              {/* Задача 4 */}
+              <TaskCard taskNumber={4} description="Чтобы приготовить джем, Оливия берёт 1 кг сахара и 2 кг персиков. Сколько кг сахара потребуется Оливии для джема из 14 кг персиков?" isCorrect={taskFeedback[4]} onCheck={() => checkTask(4)}>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                  <input type="number" placeholder="?" value={taskStates[4] || ''} onChange={e => updateTaskState(4, e.target.value)} className="w-48 p-8 text-center text-5xl font-black bg-orange-50 border-4 border-orange-100 rounded-[2.5rem] text-orange-700 outline-none focus:border-orange-500"/>
+                  <span className="text-2xl font-black text-gray-400 uppercase italic">кг сахара</span>
+                </div>
+              </TaskCard>
+
+              {/* Задача 5 */}
+              <TaskCard taskNumber={5} description="Флай задумала два однозначных числа, одно из которых в два раза больше другого. Произведение этих чисел равно 18." isCorrect={taskFeedback[5]} onCheck={() => checkTask(5)}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 max-w-2xl mx-auto">
+                   <div className="space-y-2"><p className="text-xs font-black text-blue-400 ml-4 uppercase tracking-widest">Первое число</p><input type="number" value={taskStates[5]?.v1 || ''} onChange={e => updateTaskState(5, { ...taskStates[5], v1: e.target.value })} className="w-full p-8 text-center text-4xl font-black bg-blue-50 border-4 border-blue-100 rounded-[2.5rem] focus:border-blue-500 outline-none"/></div>
+                   <div className="space-y-2"><p className="text-xs font-black text-blue-400 ml-4 uppercase tracking-widest">Второе число</p><input type="number" value={taskStates[5]?.v2 || ''} onChange={e => updateTaskState(5, { ...taskStates[5], v2: e.target.value })} className="w-full p-8 text-center text-4xl font-black bg-blue-50 border-4 border-blue-100 rounded-[2.5rem] focus:border-blue-500 outline-none"/></div>
+                </div>
+              </TaskCard>
+
+              {/* Задача 6 */}
+              <TaskCard taskNumber={6} description="На 1 стакан воды — 3 стакана сока. Взяли 9 стаканов сока. Покажи на схеме воду и сок." isCorrect={taskFeedback[6]} onCheck={() => checkTask(6)} onReset={() => updateTaskState(6, {})}>
+                <div className="space-y-10">
+                  <div className="bg-blue-50 p-10 rounded-[3rem] border-2 border-blue-100 shadow-inner">
+                    <p className="font-black text-blue-800 mb-8 uppercase text-xl tracking-widest italic">СТАКАНЫ ВОДЫ ({taskStates[6]?.water || 0})</p>
+                    <div className="flex flex-wrap gap-4">{Array.from({length: 12}).map((_, i) => <button key={i} onClick={() => updateTaskState(6, {...taskStates[6], water: i+1})} className={`transition-all duration-300 transform hover:scale-110 active:scale-90 ${i < (taskStates[6]?.water||0) ? 'opacity-100 scale-105' : 'opacity-20 grayscale'}`}><GlassIcon type="water" className="w-16 h-16"/></button>)}</div>
+                  </div>
+                  <div className="bg-red-50 p-10 rounded-[3rem] border-2 border-red-100 shadow-inner">
+                    <p className="font-black text-red-800 mb-8 uppercase text-xl tracking-widest italic">СТАКАНЫ СОКА ({taskStates[6]?.juice || 0})</p>
+                    <div className="flex flex-wrap gap-4">{Array.from({length: 12}).map((_, i) => <button key={i} onClick={() => updateTaskState(6, {...taskStates[6], juice: i+1})} className={`transition-all duration-300 transform hover:scale-110 active:scale-90 ${i < (taskStates[6]?.juice||0) ? 'opacity-100 scale-105' : 'opacity-20 grayscale'}`}><GlassIcon type="juice" className="w-16 h-16"/></button>)}</div>
+                  </div>
+                  {taskStates[6]?.part1Verified && (
+                    <div className="p-12 bg-gradient-to-br from-blue-600 to-blue-900 rounded-[3.5rem] text-white animate-in zoom-in duration-500 shadow-2xl border-4 border-blue-400">
+                      <p className="mb-8 font-black text-2xl tracking-tight leading-none">Успех! Теперь посчитай:<br/><span className="text-blue-200 text-lg font-bold">Сколько всего стаканов морса получится?</span></p>
+                      <div className="flex flex-col sm:flex-row items-center gap-8">
+                        <span className="font-black text-3xl italic tracking-widest uppercase">ИТОГО:</span>
+                        <input type="number" placeholder="?" value={taskStates[6]?.mors || ''} onChange={e => updateTaskState(6, {...taskStates[6], mors: e.target.value})} className="w-40 p-6 text-center rounded-3xl text-blue-900 font-black text-4xl outline-none border-4 border-blue-300 shadow-lg"/>
+                        <span className="font-black text-xl text-blue-100">СТАКАНОВ</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TaskCard>
+
+              {/* Задача 7 */}
+              <TaskCard taskNumber={7} description="Мистер Трудди делает голубую краску, смешивая 1 кг синей и 4 кг белой краски. Сколько кг голубой краски получится из 12 кг белой?" isCorrect={taskFeedback[7]} onCheck={() => checkTask(7)}>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                  <input type="number" placeholder="?" value={taskStates[7] || ''} onChange={e => updateTaskState(7, e.target.value)} className="w-48 p-8 text-center text-5xl font-black bg-blue-50 border-4 border-blue-100 rounded-[2.5rem] text-blue-600 outline-none focus:border-blue-500"/>
+                  <span className="text-2xl font-black text-gray-400 uppercase italic">кг краски</span>
+                </div>
+              </TaskCard>
+
+              {/* Задача 8 */}
+              <TaskCard taskNumber={8} description="Салатовый цвет: 1 кг белой и 2 кг зеленой. Покажи пропорцию для одной порции (3 кг)." isCorrect={taskFeedback[8]} onCheck={() => checkTask(8)} onReset={() => updateTaskState(8, {})}>
+                <div className="space-y-16">
+                  <div className="flex flex-col md:flex-row gap-12 items-start">
+                    <div className="flex-1 space-y-8">
+                      <div className="flex gap-6">
+                        <button onClick={() => updateTaskState(8, {...taskStates[8], white: (taskStates[8]?.white||0)+1})} className="bg-white border-4 border-gray-100 px-8 py-3 rounded-2xl text-lg font-black text-gray-700 shadow-md hover:border-blue-400 hover:scale-105 transition-all">+ БЕЛАЯ</button>
+                        <button onClick={() => updateTaskState(8, {...taskStates[8], green: (taskStates[8]?.green||0)+1})} className="bg-green-100 text-green-700 border-4 border-green-200 px-8 py-3 rounded-2xl text-lg font-black shadow-md hover:bg-green-300 hover:scale-105 transition-all">+ ЗЕЛЕНАЯ</button>
+                      </div>
+                      <div className="flex flex-wrap gap-4 p-10 bg-white rounded-[3rem] border-4 border-dashed border-gray-100 min-h-[160px] shadow-inner items-center justify-center">
+                        {Array.from({length: taskStates[8]?.white||0}).map((_,i)=><div key={`w${i}`} className="w-16 h-16 bg-white border-4 border-gray-100 rounded-2xl shadow-xl transform rotate-6 animate-in zoom-in"></div>)}
+                        {Array.from({length: taskStates[8]?.green||0}).map((_,i)=><div key={`g${i}`} className="w-16 h-16 bg-green-400 border-4 border-green-500 rounded-2xl shadow-xl transform -rotate-6 animate-in zoom-in"></div>)}
+                      </div>
+                    </div>
+                    <div className="w-full md:w-56 text-center">
+                      <p className="text-sm font-black text-gray-400 mb-4 tracking-[0.2em] uppercase italic">Масса (кг)</p>
+                      <input type="number" value={taskStates[8]?.total || ''} onChange={e => updateTaskState(8, {...taskStates[8], total: e.target.value})} className="w-full p-10 text-center text-5xl font-black bg-lime-50 rounded-[3rem] text-lime-700 border-4 border-lime-200 outline-none shadow-xl"/>
+                    </div>
+                  </div>
+                  {taskStates[8]?.part1Verified && (
+                    <div className="pt-16 border-t-8 border-dashed border-gray-100 space-y-12 animate-in slide-in-from-bottom-12 duration-700">
+                      <div className="text-center md:text-left">
+                        <p className="font-black text-gray-800 text-3xl mb-4 tracking-tight leading-none">Мистеру Трудди нужно 12 кг краски!</p>
+                        <p className="text-lime-600 font-black text-xl uppercase italic tracking-widest">Выбери банки по 3 кг (нажми на карточки):</p>
+                      </div>
+                      <div className="flex gap-6 flex-wrap justify-center bg-lime-50/50 p-10 rounded-[3.5rem]">
+                         {Array.from({length: 6}).map((_, i) => (
+                           <button key={i} onClick={() => updateTaskState(8, {...taskStates[8], p2_count: Math.min(6, (taskStates[8]?.p2_count||0)+1)})} className={`w-24 h-32 bg-lime-400 border-[8px] border-lime-500 rounded-[2rem] flex flex-col items-center justify-center font-black text-white shadow-2xl transition-all duration-300 ${i < (taskStates[8]?.p2_count||0) ? 'opacity-10 grayscale-50 scale-90 rotate-12 pointer-events-none' : 'hover:scale-110 active:scale-90'}`}>
+                             <span className="text-4xl">3</span>
+                             <span className="text-sm uppercase tracking-tighter">кг</span>
+                           </button>
+                         ))}
+                      </div>
+                      <div className="p-12 bg-white rounded-[4rem] space-y-10 border-4 border-blue-500 shadow-2xl relative overflow-hidden">
+                        <p className="font-black text-blue-900 text-2xl leading-tight relative z-10 italic">Найди, сколько ЗЕЛЕНОЙ краски в 12 кг салатовой:</p>
+                        <div className="flex flex-col xl:flex-row gap-8 items-center relative z-10">
+                          <input type="text" placeholder="ВЫРАЖЕНИЕ" value={taskStates[8]?.p2_expr || ''} onChange={e => updateTaskState(8, {...taskStates[8], p2_expr: e.target.value})} className="w-full xl:flex-1 p-7 border-4 border-blue-100 rounded-[2.5rem] text-gray-900 font-black text-3xl text-center outline-none focus:border-blue-500 shadow-inner"/>
+                          <span className="text-6xl font-black text-blue-200">=</span>
+                          <div className="flex items-center gap-6 w-full xl:w-auto">
+                            <input type="number" placeholder="?" value={taskStates[8]?.p2_ans || ''} onChange={e => updateTaskState(8, {...taskStates[8], p2_ans: e.target.value})} className="flex-1 xl:w-40 p-7 border-4 border-blue-100 rounded-[2.5rem] text-gray-900 text-center font-black text-5xl outline-none focus:border-blue-500 shadow-inner"/>
+                            <span className="font-black text-3xl text-blue-500 uppercase italic tracking-tighter">кг</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TaskCard>
+
+              {/* Задача 9 */}
+              <TaskCard taskNumber={9} description="Для ореховой смеси: 1 кг миндаля и 2 кг фундука. Сколько фундука нужно для изготовления 27 кг смеси?" isCorrect={taskFeedback[9]} onCheck={() => checkTask(9)}>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                  <input type="number" placeholder="?" value={taskStates[9] || ''} onChange={e => updateTaskState(9, e.target.value)} className="w-48 p-8 text-center text-5xl font-black bg-amber-50 border-4 border-amber-100 rounded-[2.5rem] text-amber-700 outline-none focus:border-amber-500"/>
+                  <span className="text-2xl font-black text-gray-400 uppercase italic">кг фундука</span>
+                </div>
+              </TaskCard>
+
+              {/* Задача 10 */}
+              <TaskCard taskNumber={10} description="Дон задумал два однозначных числа, одно на 3 меньше другого. Произведение — двузначное число, у которого число единиц в 4 раза больше числа десятков." isCorrect={taskFeedback[10]} onCheck={() => checkTask(10)}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 max-w-2xl mx-auto">
+                   <div className="space-y-2"><p className="text-xs font-black text-blue-400 ml-4 uppercase tracking-widest">Первое число</p><input type="number" value={taskStates[10]?.v1 || ''} onChange={e => updateTaskState(10, { ...taskStates[10], v1: e.target.value })} className="w-full p-8 text-center text-4xl font-black bg-blue-50 border-4 border-blue-100 rounded-[2.5rem] focus:border-blue-500 outline-none"/></div>
+                   <div className="space-y-2"><p className="text-xs font-black text-blue-400 ml-4 uppercase tracking-widest">Второе число</p><input type="number" value={taskStates[10]?.v2 || ''} onChange={e => updateTaskState(10, { ...taskStates[10], v2: e.target.value })} className="w-full p-8 text-center text-4xl font-black bg-blue-50 border-4 border-blue-100 rounded-[2.5rem] focus:border-blue-500 outline-none"/></div>
+                </div>
+              </TaskCard>
+
+              {/* Задача 11 */}
+              <TaskCard taskNumber={11} description="Смесь: 4 кг яблок, 3 кг груш, 1 кг чернослива и 2 кг урюка." isCorrect={taskFeedback[11]} onCheck={() => checkTask(11)}>
+                <div className="space-y-12 max-w-2xl mx-auto">
+                   <div className="bg-gray-50 p-8 rounded-[3rem] border-4 border-white shadow-inner">
+                      <p className="text-gray-600 font-bold mb-6 italic text-center">Сколько кг смеси получится, если взяли 12 кг урюка?</p>
+                      <div className="flex items-center justify-center gap-4">
+                        <input type="number" value={taskStates[11]?.v1 || ''} onChange={e => updateTaskState(11, {...taskStates[11], v1: e.target.value})} className="w-40 p-6 text-center text-4xl font-black bg-white rounded-3xl border-4 border-blue-100 outline-none focus:border-blue-500"/>
+                        <span className="font-black text-xl text-gray-400 uppercase tracking-tighter">кг</span>
+                      </div>
+                   </div>
+                   <div className="bg-gray-50 p-8 rounded-[3rem] border-4 border-white shadow-inner">
+                      <p className="text-gray-600 font-bold mb-6 italic text-center">Сколько кг груш нужно для 50 кг смеси?</p>
+                      <div className="flex items-center justify-center gap-4">
+                        <input type="number" value={taskStates[11]?.v2 || ''} onChange={e => updateTaskState(11, {...taskStates[11], v2: e.target.value})} className="w-40 p-6 text-center text-4xl font-black bg-white rounded-3xl border-4 border-blue-100 outline-none focus:border-blue-500"/>
+                        <span className="font-black text-xl text-gray-400 uppercase tracking-tighter">кг</span>
+                      </div>
+                   </div>
+                </div>
+              </TaskCard>
+
+              {/* Задача 12 */}
+              <TaskCard taskNumber={12} description="Смесь орехов: 3 кг миндаля, 3 кг фундука и 6 кг грецких орехов." isCorrect={taskFeedback[12]} onCheck={() => checkTask(12)}>
+                <div className="space-y-12 max-w-2xl mx-auto">
+                   <div className="bg-gray-50 p-8 rounded-[3rem] border-4 border-white shadow-inner">
+                      <p className="text-gray-600 font-bold mb-6 italic text-center">Сколько кг миндаля нужно для 4 кг смеси?</p>
+                      <div className="flex items-center justify-center gap-4">
+                        <input type="number" value={taskStates[12]?.v1 || ''} onChange={e => updateTaskState(12, {...taskStates[12], v1: e.target.value})} className="w-40 p-6 text-center text-4xl font-black bg-white rounded-3xl border-4 border-blue-100 outline-none focus:border-blue-500"/>
+                        <span className="font-black text-xl text-gray-400 uppercase tracking-tighter">кг</span>
+                      </div>
+                   </div>
+                   <div className="bg-gray-50 p-8 rounded-[3rem] border-4 border-white shadow-inner">
+                      <p className="text-gray-600 font-bold mb-6 italic text-center">Сколько кг смеси выйдет из 8 кг грецких орехов?</p>
+                      <div className="flex items-center justify-center gap-4">
+                        <input type="number" value={taskStates[12]?.v2 || ''} onChange={e => updateTaskState(12, {...taskStates[12], v2: e.target.value})} className="w-40 p-6 text-center text-4xl font-black bg-white rounded-3xl border-4 border-blue-100 outline-none focus:border-blue-500"/>
+                        <span className="font-black text-xl text-gray-400 uppercase tracking-tighter">кг</span>
+                      </div>
+                   </div>
+                </div>
+              </TaskCard>
+
+              {/* Задача 13 */}
+              <TaskCard taskNumber={13} description="Задумано два однозначных числа, одно на 5 больше другого. Произведение — двузначное, число десятков в 2 раза меньше числа единиц. Найди оба варианта." isCorrect={taskFeedback[13]} onCheck={() => checkTask(13)}>
+                <div className="space-y-8 max-w-2xl mx-auto">
+                  <div className="p-4 sm:p-6 bg-blue-50 rounded-[2.5rem] border-4 border-blue-100 shadow-md">
+                    <div className="grid grid-cols-2 gap-4 sm:gap-6">
+                      <input type="number" placeholder="X" value={taskStates[13]?.r1v1 || ''} onChange={e => updateTaskState(13, {...taskStates[13], r1v1: e.target.value})} className="w-full p-4 sm:p-6 border-4 border-white rounded-[1.5rem] text-gray-900 text-center font-black text-2xl sm:text-3xl outline-none focus:border-blue-400 shadow-inner"/>
+                      <input type="number" placeholder="Y" value={taskStates[13]?.r1v2 || ''} onChange={e => updateTaskState(13, {...taskStates[13], r1v2: e.target.value})} className="w-full p-4 sm:p-6 border-4 border-white rounded-[1.5rem] text-gray-900 text-center font-black text-2xl sm:text-3xl outline-none focus:border-blue-400 shadow-inner"/>
+                    </div>
+                  </div>
+                  <div className="p-4 sm:p-6 bg-purple-50 rounded-[2.5rem] border-4 border-purple-100 shadow-md">
+                    <div className="grid grid-cols-2 gap-4 sm:gap-6">
+                      <input type="number" placeholder="X" value={taskStates[13]?.r2v1 || ''} onChange={e => updateTaskState(13, {...taskStates[13], r2v1: e.target.value})} className="w-full p-4 sm:p-6 border-4 border-white rounded-[1.5rem] text-gray-900 text-center font-black text-2xl sm:text-3xl outline-none focus:border-purple-400 shadow-inner"/>
+                      <input type="number" placeholder="Y" value={taskStates[13]?.r2v2 || ''} onChange={e => updateTaskState(13, {...taskStates[13], r2v2: e.target.value})} className="w-full p-4 sm:p-6 border-4 border-white rounded-[1.5rem] text-gray-900 text-center font-black text-2xl sm:text-3xl outline-none focus:border-purple-400 shadow-inner"/>
+                    </div>
+                  </div>
+                </div>
+              </TaskCard>
+
+              {/* Задача 14 */}
+              <TaskCard taskNumber={14} description="Овощной салат: 6 кг огурцов, 4 кг помидоров, 2 кг моркови и 2 кг лука." isCorrect={taskFeedback[14]} onCheck={() => checkTask(14)}>
+                <div className="space-y-12 max-w-2xl mx-auto">
+                   <div className="bg-gray-50 p-8 rounded-[3rem] border-4 border-white shadow-inner">
+                      <p className="text-gray-600 font-bold mb-6 italic text-center">Сколько кг салата получится из 5 кг моркови?</p>
+                      <div className="flex items-center justify-center gap-4">
+                        <input type="number" value={taskStates[14]?.v1 || ''} onChange={e => updateTaskState(14, {...taskStates[14], v1: e.target.value})} className="w-40 p-6 text-center text-4xl font-black bg-white rounded-3xl border-4 border-blue-100 outline-none focus:border-blue-500"/>
+                        <span className="font-black text-xl text-gray-400 uppercase tracking-tighter">кг</span>
+                      </div>
+                   </div>
+                   <div className="bg-gray-50 p-8 rounded-[3rem] border-4 border-white shadow-inner">
+                      <p className="text-gray-600 font-bold mb-6 italic text-center">Сколько кг огурцов нужно для 21 кг салата?</p>
+                      <div className="flex items-center justify-center gap-4">
+                        <input type="number" value={taskStates[14]?.v2 || ''} onChange={e => updateTaskState(14, {...taskStates[14], v2: e.target.value})} className="w-40 p-6 text-center text-4xl font-black bg-white rounded-3xl border-4 border-blue-100 outline-none focus:border-blue-500"/>
+                        <span className="font-black text-xl text-gray-400 uppercase tracking-tighter">кг</span>
+                      </div>
+                   </div>
+                </div>
+              </TaskCard>
+            </main>
+
+            {/* Модальное окно победы */}
+            {progress === total && (
+              <div className="fixed inset-0 z-[100] bg-blue-950/90 backdrop-blur-2xl flex items-center justify-center p-6 animate-in fade-in duration-700">
+                <div className="bg-white p-20 border-[16px] border-yellow-400 rounded-[6rem] shadow-[0_0_100px_rgba(250,204,21,0.4)] text-center max-w-3xl transform scale-110 animate-bounce-light">
+                  <div className="text-[10rem] mb-12 drop-shadow-2xl">🏆</div>
+                  <h2 className="text-8xl font-black text-blue-900 mb-8 leading-none tracking-tighter">ГЕНИАЛЬНО!</h2>
+                  <p className="text-3xl font-black text-blue-500 mb-16 uppercase italic tracking-widest tracking-tighter">Ты успешно прошёл все {total} испытаний!</p>
+                  <button onClick={() => window.location.reload()} className="bg-gradient-to-br from-yellow-400 to-yellow-600 text-yellow-950 px-20 py-8 rounded-[3rem] font-black text-3xl hover:scale-110 active:scale-95 shadow-[0_20px_0_rgba(202,138,4,1)] transition-all hover:translate-y-[-4px] active:translate-y-[10px] active:shadow-none">НАЧАТЬ ЗАНОВО</button>
+                </div>
+              </div>
+            )}
+            
+            <footer className="mt-40 text-center pb-20 opacity-30">
+              <p className="text-blue-900 font-black uppercase tracking-[1em] text-sm italic">Standalone Math Master v4.1</p>
+            </footer>
+          </div>
+        );
+      };
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
